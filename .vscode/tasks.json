@@ -1,0 +1,135 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Template Parser: Process All Files",
+      "type": "shell",
+      "command": "node",
+      "args": [
+        "tmpl.js",
+        "**/*.{c,h,cpp,hpp,js,ts,txt}"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": [],
+      "detail": "Run template parser on all supported file types in the workspace"
+    },
+    {
+      "label": "Template Parser: Process C/C++ Files",
+      "type": "shell",
+      "command": "node",
+      "args": [
+        "tmpl.js",
+        "**/*.{c,h,cpp,hpp}"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": [],
+      "detail": "Run template parser on C/C++ files in the workspace"
+    },
+    {
+      "label": "Template Parser: Process JavaScript/TypeScript Files",
+      "type": "shell",
+      "command": "node",
+      "args": [
+        "tmpl.js",
+        "**/*.{js,ts}"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": [],
+      "detail": "Run template parser on JavaScript/TypeScript files in the workspace"
+    },
+    {
+      "label": "Template Parser: Process Test Fixtures",
+      "type": "shell",
+      "command": "node",
+      "args": [
+        "tmpl.js",
+        "test/fixtures/*.c"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": [],
+      "detail": "Run template parser on test fixture files"
+    },
+    {
+      "label": "Template Parser: Run Tests",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "test"
+      ],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": [],
+      "detail": "Run the template parser test suite"
+    },
+    {
+      "label": "Template Parser: Custom Pattern",
+      "type": "shell",
+      "command": "node",
+      "args": [
+        "tmpl.js",
+        "${input:globPattern}"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": [],
+      "detail": "Run template parser with a custom glob pattern"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "globPattern",
+      "description": "Enter glob pattern for files to process",
+      "default": "**/*.c",
+      "type": "promptString"
+    }
+  ]
+}

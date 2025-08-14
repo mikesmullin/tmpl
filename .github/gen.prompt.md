@@ -241,3 +241,10 @@ guess what?
 //   actually i prefer tacos
 ```
 
+---
+
+wonderful! now add a launch.json and/or tasks.json for .vscode/ which will allow me to run `tmpl.js` against the current workspace dir
+
+---
+
+thank you. now add a README.md with a short guide explaining the template syntax

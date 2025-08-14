@@ -1,0 +1,80 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Template Parser: All Files",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/tmpl.js",
+      "args": [
+        "**/*.{c,h,cpp,hpp,js,ts,txt}"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "name": "Debug Template Parser: C/C++ Files",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/tmpl.js",
+      "args": [
+        "**/*.{c,h,cpp,hpp}"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "name": "Debug Template Parser: Test Fixtures",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/tmpl.js",
+      "args": [
+        "test/fixtures/*.c"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "name": "Debug Template Parser: Custom Pattern",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/tmpl.js",
+      "args": [
+        "${input:globPattern}"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "name": "Debug Template Parser Tests",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/test.js",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "globPattern",
+      "description": "Enter glob pattern for files to process",
+      "default": "**/*.c",
+      "type": "promptString"
+    }
+  ]
+}
