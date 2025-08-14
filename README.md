@@ -222,3 +222,8 @@ The parser is designed to be extensible. Key areas for enhancement:
 - Custom content processors
 - Integration with build systems
 - IDE-specific features
+
+
+## Credit
+
+Made with Github Copilot for VSCode and Claude Sonnet 4 🤖
