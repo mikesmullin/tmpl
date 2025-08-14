@@ -1,0 +1,14 @@
+{
+  "name": "tmpl",
+  "version": "1.0.0",
+  "description": "",
+  "main": "tmpl.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "glob": "^11.0.3"
+  }
+}
