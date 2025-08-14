@@ -1,30 +1,41 @@
-# Template Language Parser
+# ⛪ Tmpl.js (Temple) 
 
-A code template system that lives entirely within comments, allowing you to generate and maintain code blocks across multiple files while preserving the original source code structure.
+*Comment-Based Template Language*
+
+A powerful, language-agnostic code template system that operates entirely within comments. Generate and maintain synchronized code blocks across multiple files while preserving your original source structure.
 
 ## Overview
 
-This template language operates exclusively within code comments (`//`), making it language-agnostic and non-intrusive. The parser processes files to find template directives and generates code based on default, replacement, and append patterns.
+Tmpl.js enables you to define reusable code templates using only comment syntax (`//`), making it completely non-intrusive to your source code. The parser processes files to find template directives and generates code based on default templates, replacements, and appends - allowing for sophisticated code generation and synchronization workflows.
+
+**Key Benefits:**
+- 🔧 **Language Agnostic** - Works with any language that supports `//` comments
+- 🚫 **Non-Intrusive** - Templates live in comments, never affecting compilation
+- 🔄 **Multi-File Sync** - Share template content across multiple files
+- 📐 **Smart Indentation** - Automatically preserves and applies proper indentation
+- 🎯 **Selective Updates** - Replace or append to existing content precisely
 
 ## Template Syntax
 
-### Basic Directives
+### Core Directives
 
-- `@block_default IDENTIFIER` - Defines a default template block
+- `@block_default IDENTIFIER` - Defines a default template block with fallback content
+- `@block IDENTIFIER` - Defines an empty template block (no default content)
 - `@block_replace IDENTIFIER` - Replaces the content of a block
 - `@block_append IDENTIFIER` - Appends content to a block
-- `@endblock` - Marks the end of a default block
+- `@endblock` - Marks the end of a block definition
 
 ### Syntax Rules
 
 1. **All directives must be in comments**: `// @directive_name IDENTIFIER`
 2. **Template content must be in comments**: `//   content_here`
-3. **Indentation is preserved**: The parser maintains relative indentation
-4. **Block scope**: Only content between `@block_default` and `@endblock` is replaced
+3. **Indentation is preserved**: The parser maintains relative indentation relationships
+4. **Block scope**: Content between block directives and `@endblock` is managed
+5. **Identifiers**: Block identifiers must be unique and can contain letters, numbers, and underscores
 
 ## Examples
 
-### Basic Example
+### Basic Template Usage
 
 **main.c** (before processing):
 ```c
@@ -65,51 +76,114 @@ int main() {
 }
 ```
 
-### Multiple Blocks
+### Empty Block Template
 
+Use `@block` for templates that don't need default content:
+
+**license.c**:
 ```c
-void setup() {
-  // @block_default INCLUDES
-  //   #include "default.h"
-  #include "default.h"
-  // @endblock
-  
-  // @block_default INIT_CODE
-  //   init_default();
-  init_default();
-  // @endblock
-}
-
-// @block_replace INCLUDES
-//   #include "custom.h"
-//   #include "extra.h"
-
-// @block_append INIT_CODE
-//   init_extra();
+// @block_replace LICENSE
+//   // WTFPL License
+//   // Do whatever you want
 ```
 
-### Nested Indentation
+**main.c**:
+```c
+// @block LICENSE
+// @endblock
+
+int main() {
+    return 0;
+}
+```
+
+**main.c** (after processing):
+```c
+// @block LICENSE
+// WTFPL License
+// Do whatever you want
+// @endblock
+
+int main() {
+    return 0;
+}
+```
+
+### Complex Multi-File Templates
+
+**shared-types.c**:
+```c
+// @block_replace COMMON_STRUCTS
+//   typedef struct Point {
+//     float x, y;
+//   } Point;
+//   
+//   typedef struct Color {
+//     u8 r, g, b, a;
+//   } Color;
+```
+
+**graphics.h**:
+```c
+#ifndef GRAPHICS_H
+#define GRAPHICS_H
+
+// @block_default COMMON_STRUCTS
+//   // Default types
+//   typedef struct Point { int x, y; } Point;
+// Default types
+typedef struct Point { int x, y; } Point;
+// @endblock
+
+void draw_point(Point p);
+
+#endif
+```
+
+**game.h**:
+```c
+#include "common.h"
+
+// @block COMMON_STRUCTS
+// @endblock
+
+void update_game();
+```
+
+**After processing**, both files get the enhanced struct definitions from `shared-types.c`.
+
+### Multiple Append Operations
 
 ```c
-if (condition) {
-    // @block_default NESTED_LOGIC
-    //     default_action();
-    default_action();
-    // @endblock
-}
+// @block_default INIT_SEQUENCE
+//   setup_core();
+setup_core();
+// @endblock
 
-// @block_replace NESTED_LOGIC
-//     custom_action();
-//     another_action();
+// @block_append INIT_SEQUENCE  
+//   setup_graphics();
+
+// @block_append INIT_SEQUENCE
+//   setup_audio();
+
+// @block_append INIT_SEQUENCE
+//   setup_input();
 ```
+
+**Result**: All append operations are combined in order.
 
 ## Usage
 
-### Command Line
+### Command Line Interface
+
+Glob patterns are supported.
 
 ```bash
-# Process all C/C++ files
-node tmpl.js "**/*.{c,h,cpp,hpp}"
+# Process all files recursively
+node tmpl.js "**/*"
+
+# Process C files only
+node tmpl.js "**/*.{c,h}"
 
 # Process specific directory
 node tmpl.js "src/**/*.c"
@@ -120,109 +194,240 @@ node tmpl.js "main.c"
 
 ### VS Code Integration
 
-The project includes VS Code tasks and launch configurations:
+It's recommended to run tmpl.js from within a VSCode task or launch configuration.
 
-1. **Ctrl+Shift+P** → "Tasks: Run Task"
-2. Choose from predefined tasks:
-   - **Template Parser: Process All Files** - Process all supported file types
-   - **Template Parser: Process C/C++ Files** - Process only C/C++ files
-   - **Template Parser: Process Test Fixtures** - Process test files
-   - **Template Parser: Custom Pattern** - Enter custom glob pattern
+The project includes comprehensive example VS Code tasks for seamless workflow integration.
 
-### NPM Scripts
+### Installation
+
+There's just one non-essential Node.js dependency on `glob`.
+
+```
+npm install
+```
+
+### Test Suite
 
 ```bash
-# Run the test suite
+# Run the comprehensive test suite
 npm test
-
-# Manual execution
-npm start -- "**/*.c"
 ```
 
 ## How It Works
 
-### Processing Logic
+### Two-Pass Processing Algorithm
 
-1. **First Pass**: Scan all files to collect template directives
-   - Find `@block_default` blocks and their content
-   - Collect `@block_replace` and `@block_append` directives
-   - Build a map of block identifiers to their content
+**First Pass - Template Discovery:**
+1. Scan all matching files for template directives
+2. Parse `@block_default` and `@block` definitions with their content
+3. Collect all `@block_replace` and `@block_append` directives
+4. Build a comprehensive map of block identifiers to their associated content
+5. Analyze indentation patterns for each template block
 
-2. **Second Pass**: Generate output
-   - For each `@block_default`, determine final content:
-     - If `@block_replace` exists: use replacement content
-     - Otherwise: use default content
-     - Add any `@block_append` content
-   - Replace only the generated content between markers
-   - Preserve template comments and original structure
+**Second Pass - Content Generation:**
+1. For each block identifier, determine the final content:
+   - **Default only**: Use content from `@block_default`
+   - **With replacement**: `@block_replace` completely overrides default content
+   - **With appends**: Add all `@block_append` content to existing content
+   - **Empty blocks**: `@block` directives get populated from replacements/appends
+2. Apply smart indentation based on the target location
+3. Replace only the generated content between block markers
+4. Preserve all template directive comments and original file structure
 
-### Content Generation Rules
+### Content Resolution Priority
 
-- **Default only**: Uses content from `@block_default`
-- **With replacement**: `@block_replace` overrides default content
-- **With appends**: `@block_append` adds to existing content (default or replaced)
-- **Multiple appends**: All append blocks are concatenated in order
-- **Multiple replacements**: Last replacement wins
+1. **Multiple Replacements**: Last `@block_replace` wins (allows override chains)
+2. **Multiple Appends**: All `@block_append` blocks concatenated in file discovery order
+3. **Mixed Operations**: Replacement content + all appends (in order)
+4. **Cross-File**: Templates can be defined in any file and applied to any other file
 
-## Indentation Handling
+### Advanced Indentation System
 
-The parser preserves indentation relationships:
+The parser uses sophisticated indentation analysis:
 
 ```c
-// @block_default EXAMPLE
-//     deeply_nested_call();
-//     another_call();
+    // Base indentation: 4 spaces
+    // @block_default EXAMPLE
+    //     template_content();  // Template indentation: 4 additional spaces
+    //     more_content();      // Results in 8 total spaces when applied
 ```
 
-Results in properly indented output:
+**Indentation Rules:**
+- Template content indentation is relative to the comment block
+- Target location indentation is preserved and added to template indentation
+- Empty comment lines (`//`) become blank lines in output
+- Mixed indentation styles (tabs/spaces) are handled gracefully
+
+### File Type Support
+
+The parser works with any text file that supports `//` comments:
+
+**Explicitly Tested:**
+- **C/C++**: `.c`, `.h`, `.cpp`, `.hpp`, `.cc`, `.cxx`, `.hh`
+- **JavaScript/TypeScript**: `.js`, `.ts`, `.jsx`, `.tsx`
+- **Text Files**: `.txt`
+
+**Should Work With:**
+- **Java**: `.java`
+- **Rust**: `.rs`
+- **Go**: `.go`
+- **Swift**: `.swift`
+- **Scala**: `.scala`
+- **And many more...**
+
+### Template Directive Parsing
+
+**Valid Directive Formats:**
 ```c
-    deeply_nested_call();
-    another_call();
+// @block_default IDENTIFIER
+// @block IDENTIFIER  
+// @block_replace IDENTIFIER
+// @block_append IDENTIFIER
+// @endblock
 ```
 
-## File Types
+**Invalid Formats:**
+```c
+//@block_default IDENTIFIER     // No space after //
+// @block_default               // Missing identifier
+// @block_default ID1 ID2       // Multiple identifiers
+/* @block_default IDENTIFIER */ // Wrong comment style
+```
 
-The parser works with any text file but is designed for source code:
-- C/C++ files (`.c`, `.h`, `.cpp`, `.hpp`)
-- JavaScript/TypeScript (`.js`, `.ts`)
-- Any file with `//` style comments
+### Indentation Rules
 
-## Best Practices
+**Clear Block Boundaries:**
+```c
+// ✅ Good: Clear start and end
+// @block_default INIT_SEQUENCE
+//   setup_core();
+setup_core();
+// @endblock
 
-1. **Descriptive identifiers**: Use clear names like `INCLUDES`, `INIT_CODE`, `EXPORTS`
-2. **Consistent indentation**: Match your project's indentation style in template content
-3. **Logical grouping**: Group related template files in the same directory
-4. **Documentation**: Add comments explaining complex template logic
+// ❌ Bad: Unclear boundaries  
+// @block_default INIT_SEQUENCE
+setup_core(); // Missing comment prefix
+// @endblock
+```
 
-## Error Handling
+**Consistent Indentation:**
+```c
+// ✅ Good: Consistent 2-space template indentation
+// @block_default LOGIC
+//   if (condition) {
+//     do_something();
+//   }
 
-The parser provides clear error messages for:
-- Invalid directive syntax
-- Missing block identifiers
-- File access issues
-- Malformed glob patterns
+// ❌ Bad: Mixed indentation
+// @block_default LOGIC  
+//   if (condition) {
+//      do_something();  // 3 spaces
+//   }
+```
 
-## Testing
+### Development Setup
 
-Run the comprehensive test suite:
+**Prerequisites:**
 ```bash
-npm test
+# Node.js 16+ required
+node --version
+
+# Install dependencies
+npm install
 ```
 
-The test suite covers:
-- Single and multi-file scenarios
-- Complex indentation patterns
-- Empty blocks and edge cases
-- Multiple append operations
+**Project Structure:**
+```
+tmpl/
+├── tmpl.js           # Main parser implementation
+├── test.js           # Comprehensive test suite  
+├── package.json      # NPM configuration & scripts
+├── .vscode/          
+│   └── tasks.json    # VS Code integration tasks
+└── test/
+    └── fixtures/     # Test case files
+```
+
+## Quick Reference
+
+### Directives
+
+| Directive | Purpose | Usage | Notes |
+|-----------|---------|-------|-------|
+| `@block_default ID` | Define template with fallback | `// @block_default INCLUDES` | Provides content when no replacement exists |
+| `@block ID` | Define empty template | `// @block LICENSE` | No default content, expects replacement |
+| `@block_replace ID` | Replace block content | `// @block_replace INCLUDES` | Overrides default completely |
+| `@block_append ID` | Append to block | `// @block_append INCLUDES` | Adds to existing content |
+| `@endblock` | Close block definition | `// @endblock` | Required for `@block_default` and `@block` |
+
+### Processing Behavior Matrix
+
+| Template State | Has Default | Has Replace | Has Append | Result |
+|----------------|-------------|-------------|------------|---------|
+| Basic | ✅ | ❌ | ❌ | Default content |
+| Replaced | ✅ | ✅ | ❌ | Replacement content |
+| Enhanced | ✅ | ❌ | ✅ | Default + append content |
+| Full Override | ✅ | ✅ | ✅ | Replacement + append content |
+| Empty Default | ❌ | ✅ | ❌ | Replacement content |
+| Empty Enhanced | ❌ | ❌ | ✅ | Append content only |
+
+### Technical Specifications
+
+**Supported Comment Formats:**
+```c
+// @directive IDENTIFIER     ✅ Standard format
+//    @directive IDENTIFIER  ✅ Extra spaces allowed
+//@directive IDENTIFIER     ❌ No space after //
+/* @directive IDENTIFIER */ ❌ Block comments not supported
+# @directive IDENTIFIER     ❌ Hash comments not supported
+```
+
+**File Processing Order:**
+1. Files are processed in glob pattern discovery order
+2. Within files, directives are processed top-to-bottom
+3. Multiple `@block_replace` directives: last one wins
+4. Multiple `@block_append` directives: all are applied in order
+
+**Memory & Performance:**
+- Files are processed in-memory with full content loaded
+- Two-pass algorithm ensures consistent results
+- Glob patterns are resolved once at startup
+- Template content is cached between passes
 
 ## Contributing
 
-The parser is designed to be extensible. Key areas for enhancement:
-- Additional directive types
-- Custom content processors
-- Integration with build systems
-- IDE-specific features
+PRs welcome.
 
+**Architecture Overview:**
+- `TemplateParser` class with two-pass processing
+- Pluggable directive parsing (`parseTemplateLine` method)
+- Flexible content generation (`generateBlockContent` method)
+- Glob-based file discovery with absolute path handling
+
+**Extension Points:**
+- **New Directive Types**: Add cases to `parseTemplateLine`
+- **Custom Content Processors**: Modify `generateBlockContent`  
+- **Alternative Comment Styles**: Extend comment detection regex
+- **Build System Integration**: Wrap `process()` method
+
+**Testing New Features:**
+```javascript
+// Add test cases to test.js
+await this.runTest('New feature test', () => this.testNewFeature());
+
+// Test method example
+async testNewFeature() {
+  const input = `/* test case input */`;
+  const expected = `/* expected output */`;
+  this.createTestFile('test.c', input);
+  
+  const parser = new TemplateParser(true);
+  await parser.process(this.tempDir + '/*.c');
+  
+  const result = this.readTestFile('test.c');
+  this.assertEqual(expected, result, 'Feature description');
+}
+```
 
 ## Credit
 
