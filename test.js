@@ -374,6 +374,97 @@ void function2() {
     this.assertEqual(expected, result, 'Multiple append blocks');
   }
 
+  async testReplaceWithTemplateComments() {
+    const input = `// @block_default ASEPRITE
+// @endblock
+
+// ...
+
+// @block_replace ASEPRITE
+//   typedef struct Exposure {
+//     Rect rect;
+//     u16 duration;
+//     struct Exposure* next;
+//   } Exposure;  // Frame-by-Frame Animation
+//
+//   typedef struct AsepriteTag {
+//     const char* name;
+//     // Exposure* exposures;
+//     u16 from, to;
+//     Exposure* ex;
+//     struct AsepriteTag* next;
+//   } AsepriteTag;
+//
+//   typedef struct {
+//     Exposure* exposures;
+//     AsepriteTag* tags;
+//     u8 fsm;
+//     Json json;
+//   } Aseprite;
+
+// Aseprite .json spritesheet format
+`;
+
+    const expected = `// @block_default ASEPRITE
+typedef struct Exposure {
+  Rect rect;
+  u16 duration;
+  struct Exposure* next;
+} Exposure;  // Frame-by-Frame Animation
+
+typedef struct AsepriteTag {
+  const char* name;
+  // Exposure* exposures;
+  u16 from, to;
+  Exposure* ex;
+  struct AsepriteTag* next;
+} AsepriteTag;
+
+typedef struct {
+  Exposure* exposures;
+  AsepriteTag* tags;
+  u8 fsm;
+  Json json;
+} Aseprite;
+// @endblock
+
+// ...
+
+// @block_replace ASEPRITE
+//   typedef struct Exposure {
+//     Rect rect;
+//     u16 duration;
+//     struct Exposure* next;
+//   } Exposure;  // Frame-by-Frame Animation
+//
+//   typedef struct AsepriteTag {
+//     const char* name;
+//     // Exposure* exposures;
+//     u16 from, to;
+//     Exposure* ex;
+//     struct AsepriteTag* next;
+//   } AsepriteTag;
+//
+//   typedef struct {
+//     Exposure* exposures;
+//     AsepriteTag* tags;
+//     u8 fsm;
+//     Json json;
+//   } Aseprite;
+
+// Aseprite .json spritesheet format
+`;
+
+    this.createTestFile('test9.c', input);
+
+    const parser = new TemplateParser(true);
+    const globPattern = this.tempDir.replace(/\\/g, '/') + '/*.c';
+    await parser.process(globPattern);
+
+    const result = this.readTestFile('test9.c');
+    this.assertEqual(expected, result, 'Replace block with template comments preserved');
+  }
+
   async runAllTests() {
     console.log('🧪 Starting Template Parser Tests...\n');
 
@@ -388,6 +479,7 @@ void function2() {
       await this.runTest('Nested indentation', () => this.testNestedIndentation());
       await this.runTest('Empty blocks', () => this.testEmptyBlocks());
       await this.runTest('Multiple appends', () => this.testMultipleAppends());
+      await this.runTest('Replace with template comments', () => this.testReplaceWithTemplateComments());
     } finally {
       await this.cleanup();
     }

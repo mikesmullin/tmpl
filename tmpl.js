@@ -78,6 +78,7 @@ class TemplateParser {
   parseTemplateContent(lines, startIdx, baseIndent) {
     const content = [];
     let i = startIdx;
+    let templateIndent = null; // The indentation to remove from template content
 
     while (i < lines.length) {
       const line = lines[i];
@@ -92,25 +93,42 @@ class TemplateParser {
         }
 
         const commentIndent = this.getCommentIndent(line);
-        if (commentIndent && commentIndent.length >= baseIndent.length) {
-          // Extract content after the comment prefix
-          const contentMatch = line.match(/^(\s*)\/\/(\s*)(.*)/);
-          if (contentMatch) {
-            const [, lineIndent, commentSpaces, contentText] = contentMatch;
-            // Only include non-empty content lines
-            if (contentText.trim() !== '') {
+        if (commentIndent) {
+          // For empty comment lines, we need to be more flexible
+          const isEmptyComment = trimmed === '//';
+          const hasValidIndent = commentIndent.length >= baseIndent.length || isEmptyComment;
+
+          if (hasValidIndent) {
+            // Extract content after the comment prefix
+            const contentMatch = line.match(/^(\s*)\/\/(\s*)(.*)/);
+            if (contentMatch) {
+              const [, lineIndent, commentSpaces, contentText] = contentMatch;
+
+              // Establish template indentation from first non-empty content line
+              if (templateIndent === null && contentText.trim() !== '') {
+                templateIndent = commentSpaces;
+              }
+
+              // Store the parsed content
               content.push({
                 indent: lineIndent,
-                content: contentText
+                commentSpaces: commentSpaces,
+                contentText: contentText,
+                originalLine: line,
+                isEmpty: contentText.trim() === ''
               });
             }
+          } else {
+            // Different indentation level - could be end of block
+            break;
           }
         } else {
-          // Different indentation level - could be end of block
+          // Not a valid comment format
           break;
         }
       } else if (trimmed === '') {
-        // Skip empty lines in template content
+        // Empty line - end of template block
+        break;
       } else {
         // Non-comment line - end of template block
         break;
@@ -119,7 +137,33 @@ class TemplateParser {
       i++;
     }
 
-    return { content, nextLine: i };
+    // Apply template indentation rules to content
+    const processedContent = content.map(item => {
+      if (item.isEmpty) {
+        return { ...item, finalContent: '' }; // Empty comment becomes blank line
+      }
+
+      // If this line has the expected template indentation, remove it
+      if (templateIndent !== null && item.commentSpaces.startsWith(templateIndent)) {
+        const remainingSpaces = item.commentSpaces.substring(templateIndent.length);
+        return { ...item, finalContent: remainingSpaces + item.contentText };
+      }
+
+      // If line has less indentation than the template, treat it as base level (no indentation)
+      if (templateIndent !== null && item.commentSpaces.length < templateIndent.length && item.contentText.trim() !== '') {
+        return { ...item, finalContent: item.contentText };
+      }
+
+      // If line was potentially trimmed (has no spaces but content), use default
+      if (item.commentSpaces === '' && item.contentText.trim() !== '') {
+        return { ...item, finalContent: item.contentText };
+      }
+
+      // Otherwise use as-is
+      return { ...item, finalContent: item.commentSpaces + item.contentText };
+    });
+
+    return { content: processedContent, nextLine: i, templateIndent };
   }
 
   /**
@@ -219,7 +263,7 @@ class TemplateParser {
   /**
    * Generate the final content for a block
    */
-  generateBlockContent(blockId, targetIndent) {
+  generateBlockContent(blockId, existingIndent) {
     const blockInfo = this.blocks.get(blockId);
     if (!blockInfo) {
       return [];
@@ -241,18 +285,44 @@ class TemplateParser {
       result = result.concat(append.content);
     }
 
-    // Extract base indentation from target
-    const baseIndentMatch = targetIndent.match(/^(\s*)/);
-    const baseIndent = baseIndentMatch ? baseIndentMatch[1] : '';
+    // Use the existing content indentation as the base
+    const baseIndent = existingIndent || '';
 
-    return result.map(item => {
+    if (!this.silent) {
+      console.log(`Generating content for block ${blockId}:`);
+      console.log(`  Base indent: "${baseIndent}" (length: ${baseIndent.length})`);
+      console.log(`  Content items:`, result.length);
+    }
+
+    // Process template content to extract actual code
+    const processedContent = [];
+
+    for (const item of result) {
       if (typeof item === 'string') {
-        return baseIndent + item;
+        // Legacy string format
+        processedContent.push(baseIndent + item);
+      } else if (item.finalContent !== undefined) {
+        // New processed format
+        if (item.isEmpty) {
+          processedContent.push(''); // Empty comment becomes blank line
+        } else {
+          processedContent.push(baseIndent + item.finalContent);
+        }
       } else {
-        // Handle structured content
-        return baseIndent + item.content;
+        // Fallback for old format
+        const content = item.content || '';
+        if (item.isEmpty || content.trim() === '') {
+          processedContent.push('');
+        } else if (content.startsWith('  ')) {
+          const unescapedContent = content.substring(2);
+          processedContent.push(baseIndent + unescapedContent);
+        } else {
+          processedContent.push(baseIndent + content.trim());
+        }
       }
-    });
+    }
+
+    return processedContent;
   }
 
   /**
@@ -268,17 +338,30 @@ class TemplateParser {
         const block = fileData.blocks[i];
 
         if (block.type === 'block_default') {
-          // Replace content between @block_default and @endblock
-          const generatedContent = this.generateBlockContent(block.blockId, block.indent);
-
-          // Find where the generated content should be inserted
-          // We need to preserve comment lines that are part of the template
+          // Get the indentation from the existing content between start and end
           let contentStart = block.startLine + 1;
           let contentEnd = block.endLine;
 
-          // Scan from contentStart to contentEnd to separate template comments from generated content
+          // Find existing content indentation
+          let existingIndent = '';
+          for (let j = contentStart; j < contentEnd; j++) {
+            const line = newLines[j];
+            if (line.trim() !== '' && !line.trim().startsWith('//')) {
+              // This is the existing content line - extract its indentation
+              const indentMatch = line.match(/^(\s*)/);
+              if (indentMatch) {
+                existingIndent = indentMatch[1];
+                break;
+              }
+            }
+          }
+
+          // Replace content between @block_default and @endblock
+          const generatedContent = this.generateBlockContent(block.blockId, existingIndent);
+
+          // Find where the generated content should be inserted
+          // We need to preserve comment lines that are part of the template
           const preservedLines = [];
-          const generatedStart = contentStart;
 
           for (let j = contentStart; j < contentEnd; j++) {
             const line = newLines[j];
