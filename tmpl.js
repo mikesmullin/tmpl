@@ -5,7 +5,12 @@ const path = require('path');
 const { glob } = require('glob');
 
 class TemplateParser {
-  constructor() {
+  constructor(silent = false) {
+    this.silent = silent;
+    this.reset();
+  }
+
+  reset() {
     this.blocks = new Map(); // blockId -> { default: content, replaces: [content], appends: [content] }
     this.files = new Map(); // filePath -> { lines, blocks: [{ type, blockId, startLine, endLine, indent, content }] }
   }
@@ -78,13 +83,14 @@ class TemplateParser {
       const line = lines[i];
       const trimmed = line.trim();
 
-      // Check for end of block
-      if (trimmed.startsWith('//') && this.parseTemplateLine(line)?.type === 'endblock') {
-        break;
-      }
-
-      // Check if it's a comment line that could contain template content
+      // Check for end of block or any other directive
       if (trimmed.startsWith('//')) {
+        const directive = this.parseTemplateLine(line);
+        if (directive) {
+          // Stop at any directive (endblock, or other block directives)
+          break;
+        }
+
         const commentIndent = this.getCommentIndent(line);
         if (commentIndent && commentIndent.length >= baseIndent.length) {
           // Extract content after the comment prefix
@@ -141,48 +147,67 @@ class TemplateParser {
 
       if (directive && directive.isBlock) {
         const baseIndent = this.getCommentIndent(line);
-        const { content, nextLine } = this.parseTemplateContent(lines, i + 1, baseIndent);
 
-        // Find the corresponding @endblock
-        let endLine = nextLine;
-        while (endLine < lines.length) {
-          const endDirective = this.parseTemplateLine(lines[endLine]);
-          if (endDirective && endDirective.type === 'endblock') {
-            break;
-          }
-          endLine++;
-        }
-
-        const blockData = {
-          type: directive.type,
-          blockId: directive.blockId,
-          startLine: i,
-          endLine: endLine,
-          indent: baseIndent,
-          content: content
-        };
-
-        fileData.blocks.push(blockData);
-
-        // Store in global blocks map
-        if (!this.blocks.has(directive.blockId)) {
-          this.blocks.set(directive.blockId, {
-            default: null,
-            replaces: [],
-            appends: []
-          });
-        }
-
-        const blockInfo = this.blocks.get(directive.blockId);
+        // For block_default, we need to find the @endblock
         if (directive.type === 'block_default') {
-          blockInfo.default = { content, filePath, indent: baseIndent };
-        } else if (directive.type === 'block_replace') {
-          blockInfo.replaces.push({ content, filePath, indent: baseIndent });
-        } else if (directive.type === 'block_append') {
-          blockInfo.appends.push({ content, filePath, indent: baseIndent });
-        }
+          const { content, nextLine } = this.parseTemplateContent(lines, i + 1, baseIndent);
 
-        i = endLine + 1;
+          // Find the corresponding @endblock
+          let endLine = nextLine;
+          while (endLine < lines.length) {
+            const endDirective = this.parseTemplateLine(lines[endLine]);
+            if (endDirective && endDirective.type === 'endblock') {
+              break;
+            }
+            endLine++;
+          }
+
+          const blockData = {
+            type: directive.type,
+            blockId: directive.blockId,
+            startLine: i,
+            endLine: endLine,
+            indent: baseIndent,
+            content: content
+          };
+
+          fileData.blocks.push(blockData);
+
+          // Store in global blocks map
+          if (!this.blocks.has(directive.blockId)) {
+            this.blocks.set(directive.blockId, {
+              default: null,
+              replaces: [],
+              appends: []
+            });
+          }
+
+          const blockInfo = this.blocks.get(directive.blockId);
+          blockInfo.default = { content, filePath, indent: baseIndent };
+
+          i = endLine + 1;
+        } else {
+          // For block_replace and block_append, parse content until next directive or end of file
+          const { content, nextLine } = this.parseTemplateContent(lines, i + 1, baseIndent);
+
+          // Store in global blocks map
+          if (!this.blocks.has(directive.blockId)) {
+            this.blocks.set(directive.blockId, {
+              default: null,
+              replaces: [],
+              appends: []
+            });
+          }
+
+          const blockInfo = this.blocks.get(directive.blockId);
+          if (directive.type === 'block_replace') {
+            blockInfo.replaces.push({ content, filePath, indent: baseIndent });
+          } else if (directive.type === 'block_append') {
+            blockInfo.appends.push({ content, filePath, indent: baseIndent });
+          }
+
+          i = nextLine;
+        }
       } else {
         i++;
       }
@@ -246,12 +271,43 @@ class TemplateParser {
           // Replace content between @block_default and @endblock
           const generatedContent = this.generateBlockContent(block.blockId, block.indent);
 
-          // Find the actual content area (after @block_default, before @endblock)
+          // Find where the generated content should be inserted
+          // We need to preserve comment lines that are part of the template
           let contentStart = block.startLine + 1;
           let contentEnd = block.endLine;
 
-          // Remove existing content between the markers
-          newLines.splice(contentStart, contentEnd - contentStart, ...generatedContent);
+          // Scan from contentStart to contentEnd to separate template comments from generated content
+          const preservedLines = [];
+          const generatedStart = contentStart;
+
+          for (let j = contentStart; j < contentEnd; j++) {
+            const line = newLines[j];
+            const trimmed = line.trim();
+
+            // If it's a comment line with the same or deeper indentation as the block,
+            // it might be template content that should be preserved
+            if (trimmed.startsWith('//')) {
+              const lineIndent = this.getCommentIndent(line);
+              if (lineIndent && lineIndent.length >= block.indent.length) {
+                // Check if this comment contains template content (not a directive)
+                const contentMatch = line.match(/^(\s*)\/\/(\s*)(.*)/);
+                if (contentMatch) {
+                  const [, , , contentText] = contentMatch;
+                  if (contentText.trim() !== '' && !contentText.trim().startsWith('@')) {
+                    preservedLines.push(line);
+                    continue;
+                  }
+                }
+              }
+            }
+
+            // This is either generated content or other code - mark the start of replacement
+            break;
+          }
+
+          // Insert preserved template comments, then generated content
+          const replacementLines = [...preservedLines, ...generatedContent];
+          newLines.splice(contentStart, contentEnd - contentStart, ...replacementLines);
           modified = true;
         }
       }
@@ -259,7 +315,9 @@ class TemplateParser {
       if (modified) {
         const newContent = newLines.join('\n');
         fs.writeFileSync(filePath, newContent, 'utf8');
-        console.log(`Updated: ${filePath}`);
+        if (!this.silent) {
+          console.log(`Updated: ${filePath}`);
+        }
       }
     }
   }
@@ -269,34 +327,45 @@ class TemplateParser {
    */
   async process(globPattern) {
     try {
+      // Reset state for each processing run
+      this.reset();
+
       // Find all matching files
       const filePaths = await glob(globPattern, { absolute: true });
 
       if (filePaths.length === 0) {
-        console.log(`No files found matching pattern: ${globPattern}`);
+        if (!this.silent) {
+          console.log(`No files found matching pattern: ${globPattern}`);
+        }
         return;
       }
 
-      console.log(`Processing ${filePaths.length} files...`);
+      if (!this.silent) {
+        console.log(`Processing ${filePaths.length} files...`);
+      }
 
       // First pass: parse all files
       await this.parseFiles(filePaths);
 
       // Debug output
-      console.log('\nFound blocks:');
-      for (const [blockId, blockInfo] of this.blocks.entries()) {
-        console.log(`  ${blockId}:`);
-        if (blockInfo.default) {
-          console.log(`    default: ${blockInfo.default.content.length} lines`);
+      if (!this.silent) {
+        console.log('\nFound blocks:');
+        for (const [blockId, blockInfo] of this.blocks.entries()) {
+          console.log(`  ${blockId}:`);
+          if (blockInfo.default) {
+            console.log(`    default: ${blockInfo.default.content.length} lines`);
+          }
+          console.log(`    replaces: ${blockInfo.replaces.length}`);
+          console.log(`    appends: ${blockInfo.appends.length}`);
         }
-        console.log(`    replaces: ${blockInfo.replaces.length}`);
-        console.log(`    appends: ${blockInfo.appends.length}`);
       }
 
       // Second pass: generate output
       this.generateOutput();
 
-      console.log('\nProcessing complete!');
+      if (!this.silent) {
+        console.log('\nProcessing complete!');
+      }
 
     } catch (error) {
       console.error('Error processing files:', error.message);

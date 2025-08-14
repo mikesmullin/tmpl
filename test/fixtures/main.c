@@ -1,6 +1,7 @@
 int main() {
   u32 test_array[] = {
       // @block_default ARRAY_DEF
+      //   0,
       1,
       2,
       // @endblock

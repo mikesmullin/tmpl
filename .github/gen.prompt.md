@@ -139,3 +139,105 @@ and writes its changes directly back to those files
 (NOTICE: Only the areas between `@block_default`...`@endblock` are where modified content is replaced)
 
 then run the code and verify the output.
+
+---
+
+great! now add a set of unit tests to verify the functionality of the template parser.
+
+include scenarios like these ones:
+
+1)
+
+given input:
+```
+int main() {
+  u32 test_array[] = {
+      // @block_default ARRAY_DEF
+      // 0
+      0,
+      // @endblock
+  };
+  return 0;
+}
+
+// @block_replace ARRAY_DEF
+//   1,
+
+// @block_append ARRAY_DEF
+//   2,
+```
+
+expected output:
+```
+int main() {
+  u32 test_array[] = {
+      // @block_default ARRAY_DEF
+      // 0
+      1,
+      2,
+      // @endblock
+  };
+  return 0;
+}
+
+// @block_replace ARRAY_DEF
+//   1,
+
+// @block_append ARRAY_DEF
+//   2,
+```
+
+
+2)
+
+given input:
+```
+int main() {
+  u32 test_array[] = {
+      // @block_default ARRAY_DEF
+      // 0
+      0,
+      // @endblock
+  };
+  return 0;
+}
+```
+
+expected output:
+```
+int main() {
+  u32 test_array[] = {
+      // @block_default ARRAY_DEF
+      // 0
+      0,
+      // @endblock
+  };
+  return 0;
+}
+```
+
+
+3)
+
+given input:
+```
+guess what?
+  // @block_default burrito
+  i like them
+  // @endblock
+
+// @block_replace burrito
+//   actually i prefer tacos
+```
+
+expected output:
+```
+guess what?
+  // @block_default burrito
+  actually i prefer tacos
+  // @endblock
+
+// @block_replace burrito
+//   actually i prefer tacos
+```
+
