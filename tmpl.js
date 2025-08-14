@@ -36,6 +36,7 @@ class TemplateParser {
       case '@block_default':
       case '@block_replace':
       case '@block_append':
+      case '@block':
         if (args.length !== 1) {
           throw new Error(`Invalid ${command}: expected exactly one identifier`);
         }
@@ -192,12 +193,10 @@ class TemplateParser {
       if (directive && directive.isBlock) {
         const baseIndent = this.getCommentIndent(line);
 
-        // For block_default, we need to find the @endblock
-        if (directive.type === 'block_default') {
-          const { content, nextLine } = this.parseTemplateContent(lines, i + 1, baseIndent);
-
+        // For block_default and block, we need to find the @endblock
+        if (directive.type === 'block_default' || directive.type === 'block') {
           // Find the corresponding @endblock
-          let endLine = nextLine;
+          let endLine = i + 1;
           while (endLine < lines.length) {
             const endDirective = this.parseTemplateLine(lines[endLine]);
             if (endDirective && endDirective.type === 'endblock') {
@@ -205,6 +204,15 @@ class TemplateParser {
             }
             endLine++;
           }
+
+          let content = [];
+          
+          // For block_default, parse the template content
+          if (directive.type === 'block_default') {
+            const { content: parsedContent } = this.parseTemplateContent(lines, i + 1, baseIndent);
+            content = parsedContent;
+          }
+          // For @block, there's no default content to parse
 
           const blockData = {
             type: directive.type,
@@ -227,7 +235,10 @@ class TemplateParser {
           }
 
           const blockInfo = this.blocks.get(directive.blockId);
-          blockInfo.default = { content, filePath, indent: baseIndent };
+          if (directive.type === 'block_default') {
+            blockInfo.default = { content, filePath, indent: baseIndent };
+          }
+          // For @block, we don't set a default
 
           i = endLine + 1;
         } else {
@@ -337,7 +348,7 @@ class TemplateParser {
       for (let i = fileData.blocks.length - 1; i >= 0; i--) {
         const block = fileData.blocks[i];
 
-        if (block.type === 'block_default') {
+        if (block.type === 'block_default' || block.type === 'block') {
           // Get the indentation from the existing content between start and end
           let contentStart = block.startLine + 1;
           let contentEnd = block.endLine;
@@ -356,36 +367,39 @@ class TemplateParser {
             }
           }
 
-          // Replace content between @block_default and @endblock
+          // Replace content between @block_default/@block and @endblock
           const generatedContent = this.generateBlockContent(block.blockId, existingIndent);
 
           // Find where the generated content should be inserted
           // We need to preserve comment lines that are part of the template
           const preservedLines = [];
 
-          for (let j = contentStart; j < contentEnd; j++) {
-            const line = newLines[j];
-            const trimmed = line.trim();
+          // For @block_default, preserve template comments; for @block, don't preserve them
+          if (block.type === 'block_default') {
+            for (let j = contentStart; j < contentEnd; j++) {
+              const line = newLines[j];
+              const trimmed = line.trim();
 
-            // If it's a comment line with the same or deeper indentation as the block,
-            // it might be template content that should be preserved
-            if (trimmed.startsWith('//')) {
-              const lineIndent = this.getCommentIndent(line);
-              if (lineIndent && lineIndent.length >= block.indent.length) {
-                // Check if this comment contains template content (not a directive)
-                const contentMatch = line.match(/^(\s*)\/\/(\s*)(.*)/);
-                if (contentMatch) {
-                  const [, , , contentText] = contentMatch;
-                  if (contentText.trim() !== '' && !contentText.trim().startsWith('@')) {
-                    preservedLines.push(line);
-                    continue;
+              // If it's a comment line with the same or deeper indentation as the block,
+              // it might be template content that should be preserved
+              if (trimmed.startsWith('//')) {
+                const lineIndent = this.getCommentIndent(line);
+                if (lineIndent && lineIndent.length >= block.indent.length) {
+                  // Check if this comment contains template content (not a directive)
+                  const contentMatch = line.match(/^(\s*)\/\/(\s*)(.*)/);
+                  if (contentMatch) {
+                    const [, , , contentText] = contentMatch;
+                    if (contentText.trim() !== '' && !contentText.trim().startsWith('@')) {
+                      preservedLines.push(line);
+                      continue;
+                    }
                   }
                 }
               }
-            }
 
-            // This is either generated content or other code - mark the start of replacement
-            break;
+              // This is either generated content or other code - mark the start of replacement
+              break;
+            }
           }
 
           // Insert preserved template comments, then generated content

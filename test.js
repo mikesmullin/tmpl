@@ -465,6 +465,53 @@ typedef struct {
     this.assertEqual(expected, result, 'Replace block with template comments preserved');
   }
 
+  async testBlockReplaceAcrossMultipleFiles() {
+    // Test case: @block_replace in one file replaces @block in multiple files
+    const licenseFile = `// license.c
+// @block_replace LICENSE
+//   WTFPL...
+// @endblock`;
+
+    const fileA = `// fileA.c
+// @block LICENSE
+// @endblock`;
+
+    const fileZ = `// fileZ.c
+// @block LICENSE
+// @endblock`;
+
+    const expectedLicense = `// license.c
+// @block_replace LICENSE
+//   WTFPL...
+// @endblock`;
+
+    const expectedFileA = `// fileA.c
+// @block LICENSE
+WTFPL...
+// @endblock`;
+
+    const expectedFileZ = `// fileZ.c
+// @block LICENSE
+WTFPL...
+// @endblock`;
+
+    this.createTestFile('license.c', licenseFile);
+    this.createTestFile('fileA.c', fileA);
+    this.createTestFile('fileZ.c', fileZ);
+
+    const parser = new TemplateParser(true);
+    const globPattern = this.tempDir.replace(/\\/g, '/') + '/*.c';
+    await parser.process(globPattern);
+
+    const resultLicense = this.readTestFile('license.c');
+    const resultFileA = this.readTestFile('fileA.c');
+    const resultFileZ = this.readTestFile('fileZ.c');
+
+    this.assertEqual(expectedLicense, resultLicense, 'License file with @block_replace should remain unchanged');
+    this.assertEqual(expectedFileA, resultFileA, 'FileA @block should be replaced with content from @block_replace');
+    this.assertEqual(expectedFileZ, resultFileZ, 'FileZ @block should be replaced with content from @block_replace');
+  }
+
   async runAllTests() {
     console.log('🧪 Starting Template Parser Tests...\n');
 
@@ -480,6 +527,7 @@ typedef struct {
       await this.runTest('Empty blocks', () => this.testEmptyBlocks());
       await this.runTest('Multiple appends', () => this.testMultipleAppends());
       await this.runTest('Replace with template comments', () => this.testReplaceWithTemplateComments());
+      await this.runTest('Block replace across multiple files', () => this.testBlockReplaceAcrossMultipleFiles());
     } finally {
       await this.cleanup();
     }
